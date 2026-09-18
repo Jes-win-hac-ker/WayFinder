@@ -148,7 +148,7 @@ app.get("/journeys/share/:shareToken", async (req: Request, res: Response) => {
     destination: journey.destination ?? null,
     lastHeartbeatAt: journey.lastHeartbeatAt,
     lastLocation: journey.lastLocation,
-    duress: journey.duress,
+
     shareToken,
   });
 });
