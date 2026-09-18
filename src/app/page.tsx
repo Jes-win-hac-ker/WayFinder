@@ -15,6 +15,7 @@ type SharedJourney = {
   destination: { label: string; latitude: number; longitude: number } | null;
   lastHeartbeatAt: string | null;
   lastLocation: { latitude: number; longitude: number; accuracy?: number } | null;
+  duress?: boolean;
 };
 
 const initialRoute: Point[] = [
@@ -67,6 +68,7 @@ export default function Home() {
   const maplibre = useRef<typeof import("maplibre-gl") | null>(null);
   const socket = useRef<Socket | null>(null);
   const watchId = useRef<number | null>(null);
+  const duressIntervalId = useRef<number | null>(null);
   const journeyIdRef = useRef<string | null>(null);
   const ownerTokenRef = useRef<string | null>(null);
   const lastAcceptedPosition = useRef<Point | null>(null);
@@ -74,6 +76,8 @@ export default function Home() {
   const cameraIntroStarted = useRef(false);
   const sharedCameraLocation = useRef<string | null>(null);
   const isStopping = useRef(false);
+  const longPressTimer = useRef<number | null>(null);
+  const suppressNextPress = useRef(false);
   const [isTracking, setIsTracking] = useState(false);
   const [position, setPosition] = useState<Point | null>(null);
   const [route, setRoute] = useState<Point[]>(initialRoute);
@@ -101,6 +105,7 @@ export default function Home() {
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [speedKph, setSpeedKph] = useState<number | null>(null);
   const [paceSecondsPerKm, setPaceSecondsPerKm] = useState<number | null>(null);
+  const [isDuress, setIsDuress] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sharedJourney, setSharedJourney] = useState<SharedJourney | null>(null);
@@ -138,6 +143,7 @@ export default function Home() {
             contactName?: string;
             contactEmail?: string;
             contactPhone?: string;
+            duress?: boolean;
           };
           journeyIdRef.current = session.journeyId;
           ownerTokenRef.current = session.ownerToken;
@@ -153,6 +159,7 @@ export default function Home() {
           setContactName(session.contactName ?? "");
           setContactEmail(session.contactEmail ?? "");
           setContactPhone(session.contactPhone ?? "");
+          setIsDuress(session.duress === true);
         } catch {
           window.sessionStorage.removeItem("wayfinder-active-session");
         }
@@ -442,6 +449,8 @@ export default function Home() {
     isStopping.current = true;
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
     watchId.current = null;
+    if (duressIntervalId.current !== null) window.clearInterval(duressIntervalId.current);
+    duressIntervalId.current = null;
     setIsTracking(false);
     setTrackingStartedAt(null);
     const activeJourneyId = journeyIdRef.current;
@@ -466,7 +475,7 @@ export default function Home() {
         });
   }, [backendUrl]);
 
-  const startTracking = async () => {
+  const startTracking = async (duress = false) => {
     if (!navigator.geolocation) {
       setError("Location services are not available in this browser.");
       return;
@@ -475,11 +484,11 @@ export default function Home() {
       setError(`Backend is offline. Start it at ${backendUrl} before sharing a journey.`);
       return;
     }
-    if (!destination) {
+    if (!destination && !duress) {
       setError("Choose a destination before starting the journey.");
       return;
     }
-    if (!contactName.trim() || (!contactEmail.trim() && !contactPhone.trim())) {
+    if ((!contactName.trim() || (!contactEmail.trim() && !contactPhone.trim())) && !duress) {
       setError("Add the trusted person’s name and an email or phone number.");
       return;
     }
@@ -491,11 +500,12 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           travelerId,
-          contactName: contactName.trim(),
-          ...(contactEmail.trim() ? { contactEmail: contactEmail.trim() } : {}),
+          contactName: contactName.trim() || (duress ? "Emergency Protocol" : ""),
+          ...(contactEmail.trim() ? { contactEmail: contactEmail.trim() } : (!contactPhone.trim() && duress ? { contactPhone: "000-000-0000" } : {})),
           ...(contactPhone.trim() ? { contactPhone: contactPhone.trim() } : {}),
+          duress,
           eta: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-          destination: { ...destination, label: destinationLabel || "Selected destination" },
+          destination: destination ? { ...destination, label: destinationLabel || "Selected destination" } : { latitude: 37.7749, longitude: -122.4194, label: "Emergency Location" },
         }),
       });
       const responseText = await response.text();
@@ -516,10 +526,11 @@ export default function Home() {
         shareToken: journey.shareToken,
         ownerToken: journey.ownerToken,
         startedAt: Date.now(),
-        destination: { ...destination, label: destinationLabel || "Selected destination" },
-        contactName: contactName.trim(),
+        destination: destination ? { ...destination, label: destinationLabel || "Selected destination" } : { latitude: 37.7749, longitude: -122.4194, label: "Emergency Location" },
+        contactName: contactName.trim() || (duress ? "Emergency Protocol" : ""),
         contactEmail: contactEmail.trim(),
-        contactPhone: contactPhone.trim(),
+        contactPhone: contactPhone.trim() || (duress && !contactEmail.trim() ? "000-000-0000" : ""),
+        duress,
       }));
       setShareStatus("");
       journeyIdRef.current = journey.id;
@@ -529,6 +540,7 @@ export default function Home() {
       setDistanceMeters(0);
       setSpeedKph(null);
       setPaceSecondsPerKm(null);
+      setIsDuress(duress);
       socket.current?.emit("journey:join", { journeyId: journey.id, token: ownerTokenRef.current });
       setIsTracking(true);
     } catch (startError) {
@@ -539,48 +551,77 @@ export default function Home() {
     }
     lastAcceptedPosition.current = null;
     lastAcceptedAt.current = 0;
-    watchId.current = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        const next = { longitude: coords.longitude, latitude: coords.latitude };
-        setPosition(next);
-        const previous = lastAcceptedPosition.current;
-        const distance = previous
-          ? Math.hypot((next.longitude - previous.longitude) * 111_320 * Math.cos(next.latitude * Math.PI / 180), (next.latitude - previous.latitude) * 111_320)
-          : Infinity;
-        const now = Date.now();
-        if (previous && distance < 10 && now - lastAcceptedAt.current < 5000) return;
-        lastAcceptedPosition.current = next;
-        lastAcceptedAt.current = now;
-        if (previous) setDistanceMeters((current) => current + distance);
-        if (typeof coords.speed === "number" && Number.isFinite(coords.speed) && coords.speed >= 0) {
-          setSpeedKph(coords.speed * 3.6);
-          setPaceSecondsPerKm(coords.speed > 0 ? 1000 / coords.speed : null);
+    if (duress) {
+      const fakeStart = { latitude: 37.7749, longitude: -122.4194 };
+      const fakeEnd = { latitude: 37.7849, longitude: -122.4094 };
+      setRoute([fakeStart, fakeEnd]);
+      setPosition(fakeStart);
+      setDistanceMeters(0);
+      setSpeedKph(15);
+      setPaceSecondsPerKm(240);
+      
+      if (map.current && maplibre.current) {
+        if (!marker.current) {
+          marker.current = new maplibre.current.Marker({ color: "#ef8354" }).setLngLat([fakeStart.longitude, fakeStart.latitude]).addTo(map.current);
+        } else {
+          marker.current.setLngLat([fakeStart.longitude, fakeStart.latitude]);
         }
-        setRoute((current) => previous ? [...current, next] : [next]);
+        map.current.easeTo({ center: [fakeStart.longitude, fakeStart.latitude], zoom: 15, pitch: 8, duration: 400 });
+      }
+
+      duressIntervalId.current = window.setInterval(() => {
         if (journeyIdRef.current) {
           void fetch(`${backendUrl}/journeys/${journeyIdRef.current}/heartbeat`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${ownerTokenRef.current ?? ""}` },
-            body: JSON.stringify({ travelerId, latitude: next.latitude, longitude: next.longitude, accuracy: coords.accuracy }),
-          }).catch(() => setError("GPS is active, but the backend missed a heartbeat."));
+            body: JSON.stringify({ travelerId, latitude: fakeStart.latitude, longitude: fakeStart.longitude, accuracy: 10, duress: true }),
+          }).catch(() => {});
         }
-        if (map.current && maplibre.current) {
-          if (!marker.current) {
-            marker.current = new maplibre.current.Marker({ color: "#ef8354" }).setLngLat([next.longitude, next.latitude]).addTo(map.current);
-          } else {
-            marker.current.setLngLat([next.longitude, next.latitude]);
+      }, 5000);
+    } else {
+      watchId.current = navigator.geolocation.watchPosition(
+        ({ coords }) => {
+          const next = { longitude: coords.longitude, latitude: coords.latitude };
+          setPosition(next);
+          const previous = lastAcceptedPosition.current;
+          const distance = previous
+            ? Math.hypot((next.longitude - previous.longitude) * 111_320 * Math.cos(next.latitude * Math.PI / 180), (next.latitude - previous.latitude) * 111_320)
+            : Infinity;
+          const now = Date.now();
+          if (previous && distance < 10 && now - lastAcceptedAt.current < 5000) return;
+          lastAcceptedPosition.current = next;
+          lastAcceptedAt.current = now;
+          if (previous) setDistanceMeters((current) => current + distance);
+          if (typeof coords.speed === "number" && Number.isFinite(coords.speed) && coords.speed >= 0) {
+            setSpeedKph(coords.speed * 3.6);
+            setPaceSecondsPerKm(coords.speed > 0 ? 1000 / coords.speed : null);
           }
-          if (!previous || distance > 100) {
-            map.current.easeTo({ center: [next.longitude, next.latitude], zoom: 15, pitch: 8, duration: 400 });
+          setRoute((current) => previous ? [...current, next] : [next]);
+          if (journeyIdRef.current) {
+            void fetch(`${backendUrl}/journeys/${journeyIdRef.current}/heartbeat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${ownerTokenRef.current ?? ""}` },
+              body: JSON.stringify({ travelerId, latitude: next.latitude, longitude: next.longitude, accuracy: coords.accuracy, duress: false }),
+            }).catch(() => setError("GPS is active, but the backend missed a heartbeat."));
           }
-        }
-      },
-      () => {
-        setError("Location permission was declined. Enable it in your browser settings to start tracking.");
-        stopTracking();
-      },
-      { enableHighAccuracy: false, maximumAge: 10000, timeout: 20000 },
-    );
+          if (map.current && maplibre.current) {
+            if (!marker.current) {
+              marker.current = new maplibre.current.Marker({ color: "#ef8354" }).setLngLat([next.longitude, next.latitude]).addTo(map.current);
+            } else {
+              marker.current.setLngLat([next.longitude, next.latitude]);
+            }
+            if (!previous || distance > 100) {
+              map.current.easeTo({ center: [next.longitude, next.latitude], zoom: 15, pitch: 8, duration: 400 });
+            }
+          }
+        },
+        () => {
+          setError("Location permission was declined. Enable it in your browser settings to start tracking.");
+          stopTracking();
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
+      );
+    }
   };
 
   const searchDestination = async () => {
@@ -656,6 +697,35 @@ export default function Home() {
     setShowProfile(false);
   };
 
+  const clearLongPress = () => {
+    if (longPressTimer.current !== null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleJourneyPointerDown = () => {
+    if (isTracking || isStarting || isTrustedViewer) return;
+    clearLongPress();
+    longPressTimer.current = window.setTimeout(() => {
+      suppressNextPress.current = true;
+      void startTracking(true);
+    }, 700);
+  };
+
+  const handleJourneyPress = () => {
+    clearLongPress();
+    if (suppressNextPress.current) {
+      suppressNextPress.current = false;
+      return;
+    }
+    if (isTracking) {
+      stopTracking();
+    } else {
+      void startTracking(false);
+    }
+  };
+
   const signInWithPin = async () => {
     const pin = loginPin.trim();
     if (!/^[A-Za-z0-9_-]{32}$/.test(pin)) {
@@ -722,7 +792,7 @@ export default function Home() {
       <section className={styles.content} id="overview">
         <header className={styles.header}><div><p className={styles.eyebrow}>WayFinder</p><h1>Location tracking <span>✦</span></h1></div><button className={styles.iconButton} aria-label="Notifications">♧<i /></button></header>
 
-        <div className={styles.statusBar}><div className={`${styles.statusDot} ${isTracking || isTrustedViewer ? styles.live : ""}`} /><span>{isTrustedViewer ? "Shared journey" : isTracking ? "Live tracking is on" : journeyStatus === "alerted" ? "Alert triggered" : "Ready to track"}</span>{!backendConnected && <><span className={styles.statusDivider} /><span className={styles.muted}>Backend offline</span></>}</div>
+        <div className={styles.statusBar}><div className={`${styles.statusDot} ${isTracking || isTrustedViewer ? (isDuress ? styles.liveDuress : styles.live) : ""}`} /><span>{isTrustedViewer ? "Shared journey" : isTracking ? (isDuress ? "Live tracking active" : "Live tracking is on") : journeyStatus === "alerted" ? "Alert triggered" : "Ready to track"}</span>{!backendConnected && <><span className={styles.statusDivider} /><span className={styles.muted}>Backend offline</span></>}</div>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {isTrustedViewer && sharedJourney && <p className={styles.sharedBanner}>Shared journey · Syncing every 5s</p>}
         {journeyId && sharePin && <div className={styles.journeyMeta}><span className={styles.sharePin}><span><small>SHARE CODE</small><b>{sharePin}</b></span><button type="button" onClick={() => void shareJourneyPin()}>Share</button>{shareStatus && <small>{shareStatus}</small>}</span></div>}
@@ -748,7 +818,7 @@ export default function Home() {
         </div>
 
         <section className={styles.details} id="coordinates"><div className={styles.sectionHeading}><div><p className={styles.eyebrow}>Coordinates</p><h2>Current location</h2></div></div><div className={styles.coordinateGrid}><div><span>Latitude</span><strong>{formatCoordinate(position?.latitude ?? 9.9364, "lat")}</strong></div><div><span>Longitude</span><strong>{formatCoordinate(position?.longitude ?? 76.2756, "lng")}</strong></div><div><span>Accuracy</span><strong>{position ? "± 12 m" : "± 25 m"}</strong></div><div><span>Signal</span><strong className={styles.signal}><i /><i /><i /><i /></strong></div></div></section>
-        <button disabled={isTrustedViewer || isStarting || journeyStatus !== "active"} onClick={isTracking ? stopTracking : startTracking} className={`${isTracking ? styles.stopButton : styles.trackButton} ${styles.journeyAction}`}>{isTrustedViewer ? "Viewing" : isStarting ? "Creating journey…" : isTracking ? "Stop tracking" : "Start journey"} <span>{isTracking ? "×" : "→"}</span></button>
+        <button disabled={isTrustedViewer || isStarting || journeyStatus !== "active"} onPointerDown={handleJourneyPointerDown} onPointerUp={clearLongPress} onPointerLeave={clearLongPress} onPointerCancel={clearLongPress} onClick={handleJourneyPress} className={`${isTracking ? styles.stopButton : styles.trackButton} ${styles.journeyAction}`}>{isTrustedViewer ? "Viewing" : isStarting ? "Creating journey…" : isTracking ? "Stop tracking" : "Start journey"} <span>{isTracking ? "×" : "→"}</span></button>
       </section>
     </main>
   );
