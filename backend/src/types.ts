@@ -5,6 +5,7 @@ export type Journey = {
   shareTokenHash: string;
   ownerTokenHash: string;
   shareExpiresAt: string;
+  duress: boolean;
   travelerId: string;
   contactName: string;
   contactPhone?: string;
@@ -33,4 +34,5 @@ export type HeartbeatInput = {
   longitude: number;
   accuracy?: number;
   recordedAt?: string;
+  duress?: boolean;
 };

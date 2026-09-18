@@ -78,7 +78,7 @@ function recordShareFailure(req: Request) {
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.post("/journeys", async (req: Request, res: Response) => {
-  const { travelerId, contactName, contactPhone, contactEmail, eta, gracePeriodMs, destination } = req.body ?? {};
+  const { travelerId, contactName, contactPhone, contactEmail, eta, gracePeriodMs, destination, duress } = req.body ?? {};
   const etaDate = new Date(eta);
 
   if (
@@ -108,6 +108,7 @@ app.post("/journeys", async (req: Request, res: Response) => {
     shareTokenHash: tokenHash(shareToken),
     ownerTokenHash: tokenHash(ownerToken),
     shareExpiresAt: new Date(Date.now() + shareTokenLifetimeMs).toISOString(),
+    duress: duress === true,
     travelerId,
     contactName,
     eta: etaDate.toISOString(),
@@ -142,10 +143,12 @@ app.get("/journeys/share/:shareToken", async (req: Request, res: Response) => {
   return res.json({
     id: journey.id,
     status: journey.status,
+    duress: journey.duress,
     eta: journey.eta,
     destination: journey.destination ?? null,
     lastHeartbeatAt: journey.lastHeartbeatAt,
     lastLocation: journey.lastLocation,
+    duress: journey.duress,
     shareToken,
   });
 });
