@@ -32,3 +32,4 @@
 .details:before{content:"";position:absolute;top:0;left:0;width:4px;height:100%;background:#91b38f}
 .sectionHeading h2{font-size:22px}.updated{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid #dce3da;border-radius:20px;background:#f8faf6}.updated:before{content:"";width:6px;height:6px;border-radius:50%;background:#82a982;box-shadow:0 0 0 3px #dcebd9}
 .coordinateGrid{gap:0;margin-top:27px}.coordinateGrid>div{min-height:42px;padding-left:22px}.coordinateGrid span{font-size:9px;text-transform:uppercase;letter-spacing:1px}.coordinateGrid strong{font-size:15px;color:#20312b}.signal{gap:4px!important}.signal i{width:5px;border-radius:2px}
+.loginPage { display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f8f7f2; }
