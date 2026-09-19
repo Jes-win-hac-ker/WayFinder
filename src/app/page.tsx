@@ -184,6 +184,7 @@ export default function Home() {
       setDestination(data.destination);
       setDestinationLabel(data.destination.label);
     }
+    setIsDuress(data.duress === true);
     setIsAuthenticated(true);
   }, [backendUrl]);
 
@@ -784,9 +785,9 @@ export default function Home() {
       <section className={styles.content} id="overview">
         <header className={styles.header}><div><p className={styles.eyebrow}>WayFinder</p><h1>Location tracking <span>✦</span></h1></div><button className={styles.iconButton} aria-label="Notifications">♧<i /></button></header>
 
-        <div className={styles.statusBar}><div className={`${styles.statusDot} ${isTracking || isTrustedViewer ? (isDuress ? styles.liveDuress : styles.live) : ""}`} /><span>{isTrustedViewer ? "Shared journey" : isTracking ? (isDuress ? "Live tracking active" : "Live tracking is on") : journeyStatus === "alerted" ? "Alert triggered" : "Ready to track"}</span>{!backendConnected && <><span className={styles.statusDivider} /><span className={styles.muted}>Backend offline</span></>}</div>
+        <div className={styles.statusBar}><div className={`${styles.statusDot} ${isTracking || isTrustedViewer ? (isDuress ? styles.liveDuress : styles.live) : ""}`} /><span>{isTrustedViewer ? (isDuress ? "EMERGENCY: SOS ACTIVATED" : "Shared journey") : isTracking ? (isDuress ? "Live tracking active" : "Live tracking is on") : journeyStatus === "alerted" ? "Alert triggered" : "Ready to track"}</span>{!backendConnected && <><span className={styles.statusDivider} /><span className={styles.muted}>Backend offline</span></>}</div>
         {error && <p className={styles.error} role="alert">{error}</p>}
-        {isTrustedViewer && sharedJourney && <p className={styles.sharedBanner}>Shared journey · Syncing every 5s</p>}
+        {isTrustedViewer && sharedJourney && <p className={styles.sharedBanner} style={isDuress ? { backgroundColor: "#c0392b", color: "#fff", fontWeight: "bold" } : {}}>{isDuress ? "EMERGENCY! The traveler has activated the silent SOS duress protocol. They may be in danger." : "Shared journey · Syncing every 5s"}</p>}
         {journeyId && sharePin && <div className={styles.journeyMeta}><span className={styles.sharePin}><span><small>SHARE CODE</small><b>{sharePin}</b></span><button type="button" onClick={() => void shareJourneyPin()}>Share</button>{shareStatus && <small>{shareStatus}</small>}</span></div>}
         <div className={`${styles.destinationPicker} ${isTracking ? styles.destinationActive : ""}`}>
           <div><p className={styles.eyebrow}>{isTracking ? "Active journey" : "Journey destination"}</p><strong>{destinationLabel || "Choose where you are going"}</strong></div>
