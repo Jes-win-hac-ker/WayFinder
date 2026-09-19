@@ -768,7 +768,7 @@ export default function Home() {
 
   return (
     <main className={styles.shell}>
-      <footer className={styles.sidebar}>
+      <footer className={`${styles.sidebar} ${isTracking ? styles.sidebarHidden : ""}`}>
         <div className={styles.brand}>WayFinder</div>
         <nav className={styles.nav} aria-label="Main navigation">
           <button className={activeNav === "overview" ? styles.navItemActive : styles.navItem} onClick={() => navigateTo("overview", "overview")}><span>◉</span> Overview</button>
@@ -820,7 +820,7 @@ export default function Home() {
         </div>
 
         <section className={styles.details} id="coordinates"><div className={styles.sectionHeading}><div><p className={styles.eyebrow}>Coordinates</p><h2>Current location</h2></div></div><div className={styles.coordinateGrid}><div><span>Latitude</span><strong>{formatCoordinate(position?.latitude ?? 9.9364, "lat")}</strong></div><div><span>Longitude</span><strong>{formatCoordinate(position?.longitude ?? 76.2756, "lng")}</strong></div><div><span>Accuracy</span><strong>{position ? "± 12 m" : "± 25 m"}</strong></div><div><span>Signal</span><strong className={styles.signal}><i /><i /><i /><i /></strong></div></div></section>
-        <button disabled={isTrustedViewer || isStarting || journeyStatus !== "active"} onPointerDown={handleJourneyPointerDown} onPointerUp={clearLongPress} onPointerLeave={clearLongPress} onPointerCancel={clearLongPress} onClick={handleJourneyPress} className={`${isTracking ? styles.stopButton : styles.trackButton} ${styles.journeyAction}`}>{isTrustedViewer ? "Viewing" : isStarting ? "Creating journey…" : isTracking ? "Stop tracking" : "Start journey"} <span>{isTracking ? "×" : "→"}</span></button>
+        <button disabled={isTrustedViewer || isStarting || journeyStatus !== "active"} onPointerDown={handleJourneyPointerDown} onPointerUp={clearLongPress} onPointerLeave={clearLongPress} onPointerCancel={clearLongPress} onClick={handleJourneyPress} className={`${isTracking ? styles.stopButton : styles.trackButton} ${styles.journeyAction} ${isTracking ? styles.journeyActionTracking : ""}`}>{isTrustedViewer ? "Viewing" : isStarting ? "Creating journey…" : isTracking ? "Stop tracking" : "Start journey"} <span>{isTracking ? "×" : "→"}</span></button>
       </section>
     </main>
   );
