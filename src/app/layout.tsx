@@ -15,12 +15,22 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "WayFinder — Location Tracker",
   description: "A private, live location tracker.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "WayFinder",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#f8f7f2",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
