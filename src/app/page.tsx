@@ -430,17 +430,25 @@ export default function Home() {
     const coordinates: [number, number][] = destination
       ? [[origin.longitude, origin.latitude], [destination.longitude, destination.latitude]]
       : route.map(({ longitude, latitude }) => [longitude, latitude] as [number, number]);
-    (source as GeoJSONSource).setData({
-      type: "Feature",
-      properties: {},
-      geometry: { type: "LineString", coordinates },
-    });
-    if (destination) {
-      const bounds = coordinates.reduce(
-        (result, coordinate) => result.extend(coordinate),
-        new maplibre.current.LngLatBounds(coordinates[0], coordinates[0]),
-      );
-      currentMap.fitBounds(bounds, { padding: 70, maxZoom: 15, pitch: 8, duration: 600 });
+
+    if (coordinates.length >= 2) {
+      (source as GeoJSONSource).setData({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates },
+      });
+      if (destination) {
+        const bounds = coordinates.reduce(
+          (result, coordinate) => result.extend(coordinate),
+          new maplibre.current.LngLatBounds(coordinates[0], coordinates[0]),
+        );
+        currentMap.fitBounds(bounds, { padding: 70, maxZoom: 15, pitch: 8, duration: 600 });
+      }
+    } else {
+      (source as GeoJSONSource).setData({
+        type: "FeatureCollection",
+        features: []
+      });
     }
   }, [route, position, destination, roadRoute, mapReady]);
 
@@ -543,6 +551,16 @@ export default function Home() {
       setIsDuress(duress);
       socket.current?.emit("journey:join", { journeyId: journey.id, token: ownerTokenRef.current });
       setIsTracking(true);
+
+      // Force an immediate heartbeat so the viewer can see the marker instantly without waiting for a GPS move
+      if (position) {
+        void fetch(`${backendUrl}/journeys/${journey.id}/heartbeat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${journey.ownerToken}` },
+          body: JSON.stringify({ travelerId, latitude: position.latitude, longitude: position.longitude, accuracy: 10, duress }),
+        }).catch(() => {});
+      }
+
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Could not create journey.");
       return;
