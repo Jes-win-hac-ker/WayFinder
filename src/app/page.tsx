@@ -568,60 +568,53 @@ export default function Home() {
         }
         map.current.easeTo({ center: [fakeStart.longitude, fakeStart.latitude], zoom: 15, pitch: 8, duration: 400 });
       }
+    }
 
-      duressIntervalId.current = window.setInterval(() => {
+    watchId.current = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        const next = { longitude: coords.longitude, latitude: coords.latitude };
         if (journeyIdRef.current) {
           void fetch(`${backendUrl}/journeys/${journeyIdRef.current}/heartbeat`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${ownerTokenRef.current ?? ""}` },
-            body: JSON.stringify({ travelerId, latitude: fakeStart.latitude, longitude: fakeStart.longitude, accuracy: 10, duress: true }),
-          }).catch(() => {});
+            body: JSON.stringify({ travelerId, latitude: next.latitude, longitude: next.longitude, accuracy: coords.accuracy, duress }),
+          }).catch(() => {
+            if (!duress) setError("GPS is active, but the backend missed a heartbeat.");
+          });
         }
-      }, 5000);
-    } else {
-      watchId.current = navigator.geolocation.watchPosition(
-        ({ coords }) => {
-          const next = { longitude: coords.longitude, latitude: coords.latitude };
-          setPosition(next);
-          const previous = lastAcceptedPosition.current;
-          const distance = previous
-            ? Math.hypot((next.longitude - previous.longitude) * 111_320 * Math.cos(next.latitude * Math.PI / 180), (next.latitude - previous.latitude) * 111_320)
-            : Infinity;
-          const now = Date.now();
-          if (previous && distance < 10 && now - lastAcceptedAt.current < 5000) return;
-          lastAcceptedPosition.current = next;
-          lastAcceptedAt.current = now;
-          if (previous) setDistanceMeters((current) => current + distance);
-          if (typeof coords.speed === "number" && Number.isFinite(coords.speed) && coords.speed >= 0) {
-            setSpeedKph(coords.speed * 3.6);
-            setPaceSecondsPerKm(coords.speed > 0 ? 1000 / coords.speed : null);
+        if (duress) return;
+        setPosition(next);
+        const previous = lastAcceptedPosition.current;
+        const distance = previous
+          ? Math.hypot((next.longitude - previous.longitude) * 111_320 * Math.cos(next.latitude * Math.PI / 180), (next.latitude - previous.latitude) * 111_320)
+          : Infinity;
+        const now = Date.now();
+        if (previous && distance < 10 && now - lastAcceptedAt.current < 5000) return;
+        lastAcceptedPosition.current = next;
+        lastAcceptedAt.current = now;
+        if (previous) setDistanceMeters((current) => current + distance);
+        if (typeof coords.speed === "number" && Number.isFinite(coords.speed) && coords.speed >= 0) {
+          setSpeedKph(coords.speed * 3.6);
+          setPaceSecondsPerKm(coords.speed > 0 ? 1000 / coords.speed : null);
+        }
+        setRoute((current) => previous ? [...current, next] : [next]);
+        if (map.current && maplibre.current) {
+          if (!marker.current) {
+            marker.current = new maplibre.current.Marker({ color: "#ef8354" }).setLngLat([next.longitude, next.latitude]).addTo(map.current);
+          } else {
+            marker.current.setLngLat([next.longitude, next.latitude]);
           }
-          setRoute((current) => previous ? [...current, next] : [next]);
-          if (journeyIdRef.current) {
-            void fetch(`${backendUrl}/journeys/${journeyIdRef.current}/heartbeat`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${ownerTokenRef.current ?? ""}` },
-              body: JSON.stringify({ travelerId, latitude: next.latitude, longitude: next.longitude, accuracy: coords.accuracy, duress: false }),
-            }).catch(() => setError("GPS is active, but the backend missed a heartbeat."));
+          if (!previous || distance > 100) {
+            map.current.easeTo({ center: [next.longitude, next.latitude], zoom: 15, pitch: 8, duration: 400 });
           }
-          if (map.current && maplibre.current) {
-            if (!marker.current) {
-              marker.current = new maplibre.current.Marker({ color: "#ef8354" }).setLngLat([next.longitude, next.latitude]).addTo(map.current);
-            } else {
-              marker.current.setLngLat([next.longitude, next.latitude]);
-            }
-            if (!previous || distance > 100) {
-              map.current.easeTo({ center: [next.longitude, next.latitude], zoom: 15, pitch: 8, duration: 400 });
-            }
-          }
-        },
-        () => {
-          setError("Location permission was declined. Enable it in your browser settings to start tracking.");
-          stopTracking();
-        },
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
-      );
-    }
+        }
+      },
+      () => {
+        setError("Location permission was declined. Enable it in your browser settings to start tracking.");
+        stopTracking();
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+    );
   };
 
   const searchDestination = async () => {
