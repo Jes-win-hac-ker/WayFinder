@@ -791,8 +791,8 @@ export default function Home() {
           <div className={styles.sharedBanner} style={isDuress ? { backgroundColor: "#c0392b", color: "#fff", fontWeight: "bold", display: "flex", flexDirection: "column", gap: "8px" } : {}}>
             <span>{isDuress ? "EMERGENCY! The traveler has activated the silent SOS duress protocol. They may be in danger." : "Shared journey · Syncing every 5s"}</span>
             {isDuress && (
-              <a href="tel:911" style={{ backgroundColor: "#fff", color: "#c0392b", padding: "8px 12px", borderRadius: "6px", textDecoration: "none", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                Call Emergency Services (911)
+              <a href="tel:100" style={{ backgroundColor: "#fff", color: "#c0392b", padding: "8px 12px", borderRadius: "6px", textDecoration: "none", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Call Emergency Services (100)
               </a>
             )}
           </div>
