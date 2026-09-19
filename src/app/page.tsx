@@ -551,24 +551,6 @@ export default function Home() {
     }
     lastAcceptedPosition.current = null;
     lastAcceptedAt.current = 0;
-    if (duress) {
-      const fakeStart = { latitude: 37.7749, longitude: -122.4194 };
-      const fakeEnd = { latitude: 37.7849, longitude: -122.4094 };
-      setRoute([fakeStart, fakeEnd]);
-      setPosition(fakeStart);
-      setDistanceMeters(0);
-      setSpeedKph(15);
-      setPaceSecondsPerKm(240);
-      
-      if (map.current && maplibre.current) {
-        if (!marker.current) {
-          marker.current = new maplibre.current.Marker({ color: "#ef8354" }).setLngLat([fakeStart.longitude, fakeStart.latitude]).addTo(map.current);
-        } else {
-          marker.current.setLngLat([fakeStart.longitude, fakeStart.latitude]);
-        }
-        map.current.easeTo({ center: [fakeStart.longitude, fakeStart.latitude], zoom: 15, pitch: 8, duration: 400 });
-      }
-    }
 
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
@@ -582,7 +564,6 @@ export default function Home() {
             if (!duress) setError("GPS is active, but the backend missed a heartbeat.");
           });
         }
-        if (duress) return;
         setPosition(next);
         const previous = lastAcceptedPosition.current;
         const distance = previous
