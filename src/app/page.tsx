@@ -505,7 +505,7 @@ export default function Home() {
           ...(contactPhone.trim() ? { contactPhone: contactPhone.trim() } : {}),
           duress,
           eta: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-          destination: destination ? { ...destination, label: destinationLabel || "Selected destination" } : { latitude: 37.7749, longitude: -122.4194, label: "Emergency Location" },
+          ...(destination ? { destination: { ...destination, label: destinationLabel || "Selected destination" } } : {}),
         }),
       });
       const responseText = await response.text();
@@ -526,7 +526,7 @@ export default function Home() {
         shareToken: journey.shareToken,
         ownerToken: journey.ownerToken,
         startedAt: Date.now(),
-        destination: destination ? { ...destination, label: destinationLabel || "Selected destination" } : { latitude: 37.7749, longitude: -122.4194, label: "Emergency Location" },
+        ...(destination ? { destination: { ...destination, label: destinationLabel || "Selected destination" } } : {}),
         contactName: contactName.trim() || (duress ? "Emergency Protocol" : ""),
         contactEmail: contactEmail.trim(),
         contactPhone: contactPhone.trim() || (duress && !contactEmail.trim() ? "000-000-0000" : ""),
